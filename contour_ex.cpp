@@ -38,7 +38,7 @@ int main()
 
     // compute the resulting offset polylines, offset = 3
     std::vector< std::vector<cavc::Polyline<double>>> lists;
-    double step = -5.0;
+    double step = 5.0;
     for(int i=0;i<5;i++)
     {
         if(i==0)
@@ -80,7 +80,9 @@ int main()
         auto dis_size = max_p - min_p;
 		float aspect = dis_size.x / dis_size.y;
 		auto offset = glm::vec3(window_size, window_size, 0) * 0.2f;
-        auto scale = glm::vec3(window_size- 2*offset.x,window_size -2*offset.y,0.0f) / (dis_size);
+        float dis_sizemax = std::max(dis_size.x,dis_size.y);
+        float scalemax = std::max(window_size- 2*offset.x,window_size -2*offset.y);
+        auto scale = glm::vec3(scalemax,scalemax,0.0f) / dis_sizemax;
         
         {
 			auto vertices = input.vertexes();

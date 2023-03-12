@@ -9,6 +9,50 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include "glm-aabb/aabb.hpp"
+#include "cavc/mathutils.hpp"
+
+bool splinePts(cavc::Polyline<double>& pline,std::size_t i, std::size_t j,std::vector<glm::vec2>& ptContainers) {
+	const auto& v1 = pline[i];
+	const auto& v2 = pline[j];
+	std::vector<glm::vec2> points;
+	if (v1.bulgeIsZero() || fuzzyEqual(v1.pos(), v2.pos())) {
+		ptContainers.emplace_back(glm::vec2(v1.x(), v1.y()));
+	}
+	else {
+
+		auto arc = arcRadiusAndCenter(v1, v2);
+
+		double arcApproxError = 0.005;
+		if (arc.radius < arcApproxError + cavc::utils::realThreshold<double>()) {
+			ptContainers.emplace_back(v1.x(), v1.y());
+			return true;
+		}
+
+		auto startAngle = angle(arc.center, v1.pos());
+		auto endAngle = angle(arc.center, v2.pos());
+		double deltaAngle = std::abs(cavc::utils::deltaAngle(startAngle, endAngle));
+
+		double segmentSubAngle = std::abs(2.0 * std::acos(1.0 - arcApproxError / arc.radius));
+		std::size_t segmentCount = static_cast<std::size_t>(std::ceil(deltaAngle / segmentSubAngle));
+		// update segment subangle for equal length segments
+		segmentSubAngle = deltaAngle / segmentCount;
+
+		if (v1.bulge() < 0.0) {
+			segmentSubAngle = -segmentSubAngle;
+		}
+		// add the start point
+		ptContainers.emplace_back(v1.x(), v1.y());
+
+		// add remaining points
+		for (std::size_t i = 1; i < segmentCount; ++i) {
+			double angle = i * segmentSubAngle + startAngle;
+			ptContainers.emplace_back(arc.radius * std::cos(angle) + arc.center.x(),
+				arc.radius * std::sin(angle) + arc.center.y());
+		}
+	}
+
+	return true;
+};
 
 //#include <fmt/core.h>
 int main()
@@ -21,9 +65,9 @@ int main()
 
     cavc::Polyline<double> outline;
 	outline.addVertex(0, 0, 0);
-	outline.addVertex(0, 300, 0);
-	outline.addVertex(300, 300, 0);
-	outline.addVertex(300, 0, 0);
+	outline.addVertex(0, 400, 0);
+	outline.addVertex(400, 400, 0);
+	outline.addVertex(400, 0, 0);
     outline.isClosed() = true;
     cavc::invertDirection(outline);
     m_ccwLoops.push_back(outline);
@@ -60,7 +104,7 @@ int main()
         loopSet.cwLoops.push_back({0,loop,createApproxSpatialIndex(loop)});
     }
 
-	int m_offsetCount = 15;
+	int m_offsetCount = 25;
 	float m_offsetDelta = 5.0;
 	int i = 0;
 
@@ -279,6 +323,8 @@ int main()
 				}
 			}
         }
+
+#if 0
         for(auto lines : lists)
         {
             for(auto& line : lines)
@@ -301,6 +347,47 @@ int main()
 			    }
 		    }
         }
+
+#else
+		for (auto lines : lists)
+		{
+			for (auto& line : lines)
+			{
+				std::vector<glm::vec2> pts;
+
+				auto m_vertexes = line.vertexes();
+				if (m_vertexes.size() < 2) {
+					continue;;
+				}
+				std::size_t i;
+				std::size_t j;
+				if (line.isClosed()) {
+					i = 0;
+					j = m_vertexes.size() - 1;
+				}
+				else {
+					i = 1;
+					j = 0;
+				}
+
+				while (i < m_vertexes.size()) {
+					splinePts(line, j, i, pts);
+					//visitor(j, i)
+					j = i;
+					i = i + 1;
+				}
+
+				//draw pt
+				for(int k=0;k<pts.size();k++)
+				{
+					auto pt0 = pts[k];
+					auto pt1 = pts[(k + 1) % pts.size()];
+					buf.draw_line(pt0.x, pt0.y, pt1.x, pt1.y, red);
+				}
+			}
+		}
+
+#endif
         
         canvas::get_frame().stretch(buf);
 

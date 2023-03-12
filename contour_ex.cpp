@@ -7,6 +7,7 @@
 #include <fstream>
 #include <canvas.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include "glm-aabb/aabb.hpp"
 
 //#include <fmt/core.h>
@@ -15,45 +16,14 @@ int main()
     
     cavc::Polyline<double> input;
 
-   // std::ifstream infile;
-   // infile.open("../debug_loop_pts.txt");
-   // std::string line;
-   // //get num of vertices
-   // if(infile.good())
-   // {
-   //     int num_v;
-   //     while(!infile.eof())
-   //     {
-
-			//getline(infile, line);
-   //         if(line.size()==0)
-   //             break;
-			//std::istringstream iss(line);
-   //         iss >> num_v;
-   //         for(int i=0;i<num_v;i++)
-   //         {
-   //             std::getline(infile,line);
-   //     
-   //             //parse
-   //             std::istringstream iss_v(line);
-   //             float x,y,b;
-   //             iss_v >> x >> y >> b;
-
-   //             //multiply 100 to solve precision problem
-   //             input.addVertex(x,y,b);
-   //         }
-   //         //break;
-   //     }
-   // }
-
 	std::vector<cavc::Polyline<double>> m_ccwLoops;
 	std::vector<cavc::Polyline<double>> m_cwLoops;
 
     cavc::Polyline<double> outline;
 	outline.addVertex(0, 0, 0);
-	outline.addVertex(0, 400, 0);
-	outline.addVertex(400, 400, 0);
-	outline.addVertex(400, 0, 0);
+	outline.addVertex(0, 300, 0);
+	outline.addVertex(300, 300, 0);
+	outline.addVertex(300, 0, 0);
     outline.isClosed() = true;
     cavc::invertDirection(outline);
     m_ccwLoops.push_back(outline);
@@ -75,22 +45,7 @@ int main()
 	input = outline;
     // compute the resulting offset polylines, offset = 3
     std::vector< std::vector<cavc::Polyline<double>>> lists;
-    
-    /*double step = -2.0;
-    for(int i=0;i<5;i++)
-    {
-        if(i==0)
-        {
-            auto results = cavc::parallelOffset(input, step);
-            lists.emplace_back(results);
-        }
-        else
-        {
-			auto results = cavc::parallelOffset(lists[lists.size()-1][0], step);
-			lists.emplace_back(results);
-        }
-    }
-    */
+
 
 	cavc::ParallelOffsetIslands<double> alg;
 	cavc::OffsetLoopSet<double> loopSet;
@@ -105,7 +60,7 @@ int main()
         loopSet.cwLoops.push_back({0,loop,createApproxSpatialIndex(loop)});
     }
 
-	int m_offsetCount = 40;
+	int m_offsetCount = 15;
 	float m_offsetDelta = 5.0;
 	int i = 0;
 
@@ -139,15 +94,19 @@ int main()
         canvas::buffer buf;
         buf.set_size(window_size, window_size, gray);
 
-        glm::AABB aabb;
-		
+
+#pragma region get boundingbox of shape
+
+		glm::AABB aabb;
+
 		for (auto& input : m_ccwLoops)
 		{
 			auto vertices = input.vertexes();
-			for (int i = 0; i < vertices.size() ; i++)
+			for (int i = 0; i < vertices.size(); i++)
 			{
 				auto v = vertices[i];
-				aabb.extend(glm::vec3(v.x(),v.y(),0.0f));
+
+				aabb.extend(glm::vec3(v.x(), v.y(), 0.0f));
 			}
 		}
 		for (auto& input : m_cwLoops)
@@ -160,10 +119,13 @@ int main()
 			}
 		}
 
+#pragma endregion
 
+		//get corner points
         auto min_p = aabb.getMin();
         auto max_p = aabb.getMax();
-		//fmt::print("min {0} {1}\n", min_p.x,min_p.y);
+
+		//fmt::print("min {0} {1}\n", min_p.x, min_p.y);
 		//fmt::print("max {0} {1}\n", max_p.x, max_p.y);
         auto dis_size = max_p - min_p;
 		float aspect = dis_size.x / dis_size.y;
@@ -172,6 +134,107 @@ int main()
         float scalemax = std::max(window_size- 2*offset.x,window_size -2*offset.y);
         auto scale = glm::vec3(scalemax,scalemax,0.0f) / dis_sizemax;
         
+
+		//https://zhuanlan.zhihu.com/p/348798153
+		auto draw_arc = [&](canvas::buffer& buf,const glm::f64vec2& pt0,double bulge0,const glm::f64vec2& pt1,unsigned int color) {
+			//it's just a line
+			if (abs(bulge0) < 0.0000001) {
+				auto p0 = (glm::vec3(pt0.x, pt0.y, 0) - min_p);
+				auto p1 = (glm::vec3(pt1.x, pt1.y, 0) - min_p);
+				buf.draw_line(p0.x, p0.y, p1.x, p1.y, color);
+				return;
+			}
+			//calculate the center of arc
+			double b = (1 / bulge0 - bulge0) / 2;
+			glm::vec2 center(
+				(pt0.x + pt1.x - (pt1.y - pt0.y) * b) / 2,
+				(pt0.y + pt1.y + (pt1.x - pt0.x) * b) / 2
+			);
+
+			//get radius
+			double r = sqrt(pow((pt0.x - center.x), 2) + pow((pt0.y - center.y), 2));
+
+
+			//get section angles
+			double angle_s = 0.0;
+			if (pt0.x -center.x >= 0 && pt0.y -center.y >= 0) {
+				// 第一象限（以下算式包含正弦及弧度转角度）
+				angle_s = asin((pt0.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt0.x -center.x <= 0 && pt0.y -center.y >=0) {
+				// 第二象限
+				angle_s = 180 - asin((pt0.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt0.x -center.x <= 0 && pt0.y -center.y <= 0) {
+				// 第三象限
+				angle_s = 180 - asin((pt0.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt0.x -center.x >= 0 && pt0.y -center.y <= 0) {
+				// 第四象限
+				angle_s = 360 + asin((pt0.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+
+			double angle_e = 0.0;
+			if (pt1.x - center.x >= 0 && pt1.y - center.y >= 0) {
+				// 第一象限（以下算式包含正弦及弧度转角度）
+				angle_e = asin((pt1.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt1.x - center.x <= 0 && pt1.y - center.y >= 0) {
+				// 第二象限
+				angle_e = 180 - asin((pt1.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt1.x - center.x <= 0 && pt1.y - center.y <= 0) {
+				// 第三象限
+				angle_e = 180 - asin((pt1.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+			else if (pt1.x - center.x >= 0 && pt1.y - center.y <= 0) {
+				// 第四象限
+				angle_e = 360 + asin((pt1.y - center.y) / r) / (glm::pi<double>() / 180);
+			}
+
+			//draw point every 5 degree
+			int step = 5;
+			std::vector<glm::f64vec2> pts;
+			pts.emplace_back(pt0);
+			//check the bulge is positive(CCW) or negative (CW)
+			if (bulge0 > 0)
+			{
+				if (angle_s > angle_e) {
+					angle_e += 360;
+				}
+
+				//sample points
+				for (auto i = step; i <= int(angle_e - angle_s); i+=step) {
+					pts.emplace_back(glm::f64vec2(
+						center.x + r * cos((angle_s + i) * (glm::pi<double>() / 180)),
+						center.y + r * sin((angle_s + i) * (glm::pi<double>() / 180))
+					));
+				}
+			}
+			else//(bulge0 < 0)
+			{
+				if (angle_s < angle_e)
+					angle_s += 360;
+
+				//sample
+				for (auto i = step; i <= int(angle_s - angle_e); i+=step) {
+					pts.emplace_back(glm::f64vec2(
+						center.x + r * cos((angle_s - i) * (glm::pi<double>() / 180)),
+						center.y + r * sin((angle_s - i) * (glm::pi<double>() / 180))
+					));
+				}
+			}
+			//push end point
+			pts.emplace_back(pt1);
+
+			//draw this arc
+			for (int i = 0; i < pts.size() - 1; i++)
+			{
+				auto p0 =  (glm::vec3(pts[i].x, pts[i].y, 0) - min_p) ;
+				auto p1 =  (glm::vec3(pts[i + 1].x, pts[i + 1].y, 0) - min_p);
+				buf.draw_line(p0.x, p0.y, p1.x, p1.y, color);
+			}
+		};
 		//draw outline and inner line
         {
 			for(auto& input : m_ccwLoops)
@@ -184,7 +247,16 @@ int main()
 
 					auto cv_s = offset + (glm::vec3(v_s.x(), v_s.y(), 0.0) - min_p) * scale;
 					auto cv_e = offset + (glm::vec3(v_e.x(), v_e.y(), 0.0) - min_p) * scale;
-					buf.draw_line(cv_s.x,cv_s.y,cv_e.x,cv_e.y,yellow);
+
+					auto bulge_s = v_s.bulge();
+					auto bulge_e = v_e.bulge();
+
+
+					//buf.draw_line(cv_s.x,cv_s.y,cv_e.x,cv_e.y,yellow);
+
+					//draw_arc(buf, cv_s, bulge_s, cv_e, yellow);
+
+					draw_arc(buf, { v_s.x(),v_s.y() }, v_s.bulge(), { v_e.x(),v_e.y() }, yellow);
 				}
 			}
 			for (auto& input : m_cwLoops)
@@ -197,7 +269,13 @@ int main()
 
 					auto cv_s = offset + (glm::vec3(v_s.x(), v_s.y(), 0.0) - min_p) * scale;
 					auto cv_e = offset + (glm::vec3(v_e.x(), v_e.y(), 0.0) - min_p) * scale;
-					buf.draw_line(cv_s.x, cv_s.y, cv_e.x, cv_e.y, yellow);
+					//buf.draw_line(cv_s.x, cv_s.y, cv_e.x, cv_e.y, yellow);
+
+					auto bulge_s = v_s.bulge();
+
+					//draw_arc(buf, cv_s, bulge_s, cv_e, yellow);
+
+					draw_arc(buf, { v_s.x(),v_s.y() }, v_s.bulge(), { v_e.x(),v_e.y() }, yellow);
 				}
 			}
         }
@@ -213,7 +291,13 @@ int main()
 
 				    auto cv_s =offset +  (glm::vec3(v_s.x(), v_s.y(), 0.0) - min_p) * scale;
 				    auto cv_e =offset +  (glm::vec3(v_e.x(), v_e.y(), 0.0) - min_p) * scale;
-				    buf.draw_line(cv_s.x, cv_s.y, cv_e.x, cv_e.y, red);
+				    //buf.draw_line(cv_s.x, cv_s.y, cv_e.x, cv_e.y, red);
+
+					auto bulge_s = v_s.bulge();
+
+					//draw_arc(buf, cv_s, bulge_s, cv_e,red);
+
+					draw_arc(buf, { v_s.x(),v_s.y() }, v_s.bulge(), { v_e.x(),v_e.y() }, red);
 			    }
 		    }
         }
@@ -229,53 +313,6 @@ int main()
         canvas::done();
     });
 
-  //  canvas::on_render([&](){
-  //      using namespace canvas::color;
-
-  //      canvas::buffer buf;
-  //      buf.set_size(800, 600, gray);
-
-  //      glm::AABB aabb;
-		//for (auto& line : results)
-		//{
-		//	auto vertices = line.vertexes();
-		//	for (int i = 0; i < vertices.size() ; i++)
-  //          {
-  //              auto v = vertices[i];
-  //              aabb.extend(glm::vec3(v.x(),v.y(),0.0f));
-  //          }
-  //      }
-  //      auto min_p = aabb.getMin();
-  //      auto max_p = aabb.getMax();
-		////fmt::print("min {0} {1}\n", min_p.x,min_p.y);
-		////fmt::print("max {0} {1}\n", max_p.x, max_p.y);
-  //      auto dis_size = max_p - min_p;
-  //      float aspect = dis_size.x / dis_size.y;
-  //      auto scale = glm::vec3(600,600,0) / (dis_size);
-  //      for(auto& line : results)
-  //      {
-		//	auto vertices = line.vertexes();
-		//	for(int i=0;i<vertices.size()-1;i++)
-		//	{
-		//		auto v_s = vertices[i];
-  //              auto v_e = vertices[(i+1)%vertices.size()];
-
-		//		auto cv_s = (glm::vec3(v_s.x(), v_s.y(), 0.0) - min_p) * scale;
-		//		auto cv_e = (glm::vec3(v_e.x(), v_e.y(), 0.0) - min_p) * scale;
-  //              buf.draw_line(cv_s.x,cv_s.y,cv_e.x,cv_e.y,yellow);
-		//	}
-  //      }
-  //      
-  //      canvas::get_frame().stretch(buf);
-
-  //      /*  Draw the canvas.
-  //       */
-  //      canvas::finalize();
-
-  //      /*  Reset the render function.
-  //       */
-  //      canvas::done();
-  //  });
 
     return canvas::run();
 }

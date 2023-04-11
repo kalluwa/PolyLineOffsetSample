@@ -54,6 +54,59 @@ bool splinePts(cavc::Polyline<double>& pline,std::size_t i, std::size_t j,std::v
 	return true;
 };
 
+
+//test function
+void loadPoints(std::vector<cavc::Polyline<double>>& m_ccwLoops, std::vector<cavc::Polyline<double>>& m_cwLoops)
+{
+	auto path_str = R"(D:\proj\CarveraCAM\build\debug_loop_pts.txt)";
+	auto loadPointsFromFile = [](const std::string& filename)
+	{
+		std::ifstream infile(filename);
+		std::string line;
+		std::getline(infile, line);
+		std::istringstream iss(line);
+		int num_points;
+		iss >> num_points;
+
+		printf("%d points\n", num_points);
+
+		std::vector<glm::f64vec2> pts;
+		for (size_t i = 0; i < num_points; i++)
+		{
+			std::getline(infile, line);
+			std::istringstream iss(line);
+			float x, y;
+			iss >> x >> y;
+			pts.emplace_back(glm::vec2(x, y));
+		}
+		return pts;
+	};
+
+	auto pts = loadPointsFromFile(path_str);
+	//std::vector<cavc::Polyline<double>> m_ccwLoops;
+	//std::vector<cavc::Polyline<double>> m_cwLoops;
+
+	cavc::Polyline<double> innerline;
+	for (auto pt : pts)
+	{
+		innerline.addVertex(pt.x*10, pt.y * 10, 0);
+	}
+	innerline.isClosed() = true;
+	if(cavc::getArea(innerline)<0)
+		cavc::invertDirection(innerline);
+	m_ccwLoops.emplace_back(innerline);
+
+	//cavc::Polyline<double> outline;
+	//outline.addVertex(-100, -100,0);
+	//outline.addVertex(100, -100,0);
+	//outline.addVertex(100, 100,0);
+	//outline.addVertex(-100, 100,0);
+	//outline.isClosed() = true;
+
+	//m_ccwLoops.emplace_back(outline);
+
+
+}
 //#include <fmt/core.h>
 int main()
 {
@@ -63,6 +116,7 @@ int main()
 	std::vector<cavc::Polyline<double>> m_ccwLoops;
 	std::vector<cavc::Polyline<double>> m_cwLoops;
 
+#if 0
     cavc::Polyline<double> outline;
 	outline.addVertex(0, 0, 0);
 	outline.addVertex(0, 400, 0);
@@ -83,11 +137,39 @@ int main()
 	island.isClosed() = true;
     cavc::invertDirection(island);
     m_cwLoops.emplace_back(island);
-
-
 	//no exception
 	input = outline;
-    // compute the resulting offset polylines, offset = 3
+
+#elif 0
+	loadPoints(m_ccwLoops, m_cwLoops);
+
+#else
+
+	cavc::Polyline<double> outline;
+	outline.addVertex(0, 0, 0);
+	outline.addVertex(0, 400, 0);
+	outline.addVertex(400, 400, 0);
+	outline.addVertex(400, 0, 0);
+	outline.isClosed() = true;
+	cavc::invertDirection(outline);
+	m_ccwLoops.push_back(outline);
+
+
+	float xoff = 100;
+	float yoff = 100;
+	cavc::Polyline<double> island;
+	island.addVertex(xoff, yoff, 0);
+	island.addVertex(xoff + 100, yoff, 0);
+	island.addVertex(xoff, yoff + 0.000001, 0);
+	island.isClosed() = true;
+	cavc::invertDirection(island);
+	m_cwLoops.emplace_back(island);
+	//no exception
+	input = island;
+
+#endif
+
+	// compute the resulting offset polylines, offset = 3
     std::vector< std::vector<cavc::Polyline<double>>> lists;
 
 
@@ -104,7 +186,7 @@ int main()
         loopSet.cwLoops.push_back({0,loop,createApproxSpatialIndex(loop)});
     }
 
-	int m_offsetCount = 25;
+	int m_offsetCount = 5;
 	float m_offsetDelta = 5.0;
 	int i = 0;
 
@@ -382,7 +464,7 @@ int main()
 				{
 					auto pt0 = pts[k];
 					auto pt1 = pts[(k + 1) % pts.size()];
-					buf.draw_line(pt0.x, pt0.y, pt1.x, pt1.y, red);
+					buf.draw_line(pt0.x-min_p.x, pt0.y-min_p.y, pt1.x - min_p.x, pt1.y-min_p.y, red);
 				}
 			}
 		}

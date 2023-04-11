@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.0)
 
 set(projname contour)
 
-set(CXX_STANDARD C++20)
+set(CMAKE_CXX_STANDARD 20)
 
-set(include_dir D:/Extra/CavalierContoursDev/CavalierContours/include 
-	D:/projects/cmakeqt/thirdparty/fmt-8.1.1/include
-	D:/projects/cmakeqt/thirdparty/glm/
+set(include_dir 
+	D:/libs/glm
 	include)
 
 project(${projname})
+
 
 add_executable(${projname} contour_ex.cpp glm-aabb/aabb.cpp)
 
